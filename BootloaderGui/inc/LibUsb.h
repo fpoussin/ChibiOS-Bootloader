@@ -34,7 +34,7 @@ const quint16 USB_DEVICE_PID = 0xFEDC;
 const quint8 USB_CONFIGURATION = 1;   /* The sole configuration. */
 const quint8 USB_PIPE_IN = 0x81;   /* Bulk output endpoint for responses */
 const quint8 USB_PIPE_OUT = 0x01;	   /* Bulk input endpoint for commands */
-const quint16 USB_TIMEOUT_MSEC = 100;
+const quint16 USB_TIMEOUT_MSEC = 250;
 
 class QUsb : public QObject {
 

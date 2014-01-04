@@ -103,23 +103,23 @@ qint32 QUsb::read(QByteArray *buf, quint32 bytes)
     uchar *buffer = new uchar[bytes];
 
     timer.start();
-    while (!timer.hasExpired(USB_TIMEOUT_MSEC*2) && bytes-actual > 0) {
+    while (!timer.hasExpired(USB_TIMEOUT_MSEC) && bytes-actual > 0) {
         rc = libusb_bulk_transfer(dev_handle, (this->readEndpoint), buffer+actual, bytes-actual, &actual_tmp, USB_TIMEOUT_MSEC);
         actual += actual_tmp;
         if (rc != 0) break;
     }
     // we clear the buffer.
     buf->clear();
-//    QString data, s;
+    QString data, s;
 
-//    if (1) {
-//        for (qint32 i = 0; i < actual; i++) {
-//            buf->append(buffer[i]);
-//            data.append(s.sprintf("%02X",(uchar)buf->at(i))+":");
-//        }
-//        data.remove(data.size()-1, 1); //remove last colon
-//        qDebug() << "Received: " << data;
-//    }
+    if (1) {
+        for (qint32 i = 0; i < actual; i++) {
+            buf->append(buffer[i]);
+            data.append(s.sprintf("%02X",(uchar)buf->at(i))+":");
+        }
+        data.remove(data.size()-1, 1); //remove last colon
+        qDebug() << "Received: " << data;
+    }
     delete buffer;
     if (rc != 0)
     {
@@ -152,7 +152,7 @@ qint32 QUsb::write(QByteArray *buf, quint32 bytes)
     actual_tmp = 0;
 
     timer.start();
-    while (!timer.hasExpired(USB_TIMEOUT_MSEC*2) && bytes-actual > 0) {
+    while (!timer.hasExpired(USB_TIMEOUT_MSEC) && bytes-actual > 0) {
         rc = libusb_bulk_transfer(dev_handle, (this->writeEndpoint), (uchar*)buf->constData(), bytes, &actual, USB_TIMEOUT_MSEC);
         actual += actual_tmp;
         if (rc != 0) break;

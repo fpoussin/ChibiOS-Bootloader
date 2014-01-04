@@ -58,7 +58,7 @@ void transferThread::send(const QString &filename)
     }
     emit sendLock(true);
     this->m_stop = false;
-    quint32 step_size = 96;
+    quint32 step_size = 116;
     const quint32 from = 0;
     const quint32 to = file.size();
 
@@ -82,9 +82,10 @@ void transferThread::send(const QString &filename)
         qDebug() << "Erase OK";
     }
 
-    usleep(100000);
-
     qInformal() << "Writing from" << "0x"+QString::number(from, 16) << "to" << "0x"+QString::number(to, 16);
+
+    emit sendStatus("Transfering");
+    emit sendLog("Transfering");
 
     progress = 0;
     for (int i=0; i<=file.size(); i+=step_size) {
@@ -115,8 +116,6 @@ void transferThread::send(const QString &filename)
             emit sendProgress(progress);
             qInformal() << "Progress:"<< QString::number(progress)+"%";
         }
-
-        //usleep(10000);
 
     }
     emit sendLoaderStatus("Idle");

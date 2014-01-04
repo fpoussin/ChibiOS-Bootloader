@@ -73,7 +73,7 @@ qint32 Bootloader::writeFlash(quint32 addr, const QByteArray *data, quint32 len)
 
     qint32 wr = this->usb->write(&send, send.size());
 
-    usleep(25000);
+    usleep(30000);
     this->usb->read(&recv, 1);
 
     if (recv.size() < 1)
