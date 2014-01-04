@@ -10,7 +10,6 @@ greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
 TARGET = BootloaderGui
 TEMPLATE = app
-#CONFIG += console
 
 INCLUDEPATH += inc
 
@@ -31,6 +30,7 @@ win32 {
     SOURCES  += src/qwinusb.cpp
     HEADERS  += inc/qwinusb.h
     RC_FILE = res/rc.rc
+    CONFIG += console
 }
 else {
     message(Building with LibUsb support.)
@@ -41,5 +41,4 @@ else {
 
 FORMS    += mainwindow.ui
 
-RESOURCES += \
-    res/ressources.qrc
+RESOURCES += res/ressources.qrc
