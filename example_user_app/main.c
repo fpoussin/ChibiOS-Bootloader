@@ -180,23 +180,24 @@ static msg_t Thread2(void *arg) {
     if (flags & CHN_INPUT_AVAILABLE) {
 
       chnReadTimeout((BaseChannel *)&BDU1, &bp, 1, MS2ST(10));
+
+      if (bp == 0xAB) {
+
+        chSysLockFromIsr();
+
+        usbDisconnectBus(&USBD1);
+        usbStop(&USBD1);
+
+        chSysDisable();
+
+        NVIC_SystemReset();
+      }
+
+      bp *=2;
+      chnWriteTimeout((BaseChannel *)&BDU1, &bp, 1, MS2ST(10));
+      palTogglePad(GPIOE, GPIOE_LED10_RED);
+
     }
-
-    if (bp == 0xAB) {
-
-      chSysLockFromIsr();
-
-      usbDisconnectBus(&USBD1);
-      usbStop(&USBD1);
-
-      chSysDisable();
-
-      NVIC_SystemReset();
-    }
-
-    bp *=2;
-    chnWriteTimeout((BaseChannel *)&BDU1, &bp, 1, MS2ST(10));
-    palTogglePad(GPIOE, GPIOE_LED10_RED);
   }
 }
 
