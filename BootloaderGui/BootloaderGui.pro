@@ -10,7 +10,7 @@ greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
 TARGET = BootloaderGui
 TEMPLATE = app
-CONFIG += console
+#CONFIG += console
 
 INCLUDEPATH += inc
 
@@ -36,8 +36,7 @@ else {
     message(Building with LibUsb support.)
     SOURCES  += src/LibUsb.cpp
     HEADERS  += inc/LibUsb.h
-    LIBS += -L"$$_PRO_FILE_PWD_/libs/" -llibusb
-    INCLUDEPATH += $$_PRO_FILE_PWD_/libs
+    LIBS += -lusb-1.0
 }
 
 FORMS    += mainwindow.ui

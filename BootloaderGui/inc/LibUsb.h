@@ -26,20 +26,15 @@
 #include <QtEndian>
 #include <compat.h>
 
-#ifdef WIN32
-    #include <lusb0_usb.h>
-#else
-    #include <usb.h>
-#endif
+#include <libusb-1.0/libusb.h>
+
 
 const quint16 USB_ST_VID = 0x0483;
-const quint16 USB_STLINK_PID = 0x3744;
-const quint16 USB_STLINKv2_PID = 0x3748;
+const quint16 USB_DEVICE_PID = 0xFEDC;
 const quint8 USB_CONFIGURATION = 1;   /* The sole configuration. */
 const quint8 USB_PIPE_IN = 0x81;   /* Bulk output endpoint for responses */
-const quint8 USB_PIPE_OUT = 0x02;	   /* Bulk input endpoint for commands */
-const quint8 USB_PIPE_ERR = 0x83;	   /* An apparently-unused bulk endpoint. */
-const quint16 USB_TIMEOUT_MSEC = 300;
+const quint8 USB_PIPE_OUT = 0x01;	   /* Bulk input endpoint for commands */
+const quint16 USB_TIMEOUT_MSEC = 100;
 
 class QUsb : public QObject {
 
@@ -54,10 +49,9 @@ public slots:
     qint32 write(QByteArray *buf, quint32 bytes);
 
 private:
-    struct usb_dev_handle* OpenAntStick();
-    struct usb_interface_descriptor* usb_find_interface(struct usb_config_descriptor* config_descriptor);
-    struct usb_dev_handle* device;
-    struct usb_interface_descriptor* intf;
+    libusb_device **devs;
+    libusb_device_handle *dev_handle;
+    libusb_context *ctx;
 
     quint8 readEndpoint, writeEndpoint;
     quint8 interface;

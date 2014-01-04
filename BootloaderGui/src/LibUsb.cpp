@@ -24,9 +24,11 @@ QUsb::QUsb(QObject *parent) :
 {
     // dynamic load of QUsb on Windows, it is statically linked in Linux
     // this is to avoid dll conflicts where the lib has already been installed
-    this->intf = NULL;
-    this->device = NULL;
-    usb_set_debug(0);
+    //this->intf = NULL;
+    //this->device = NULL;
+    //usb_set_debug(0);
+    this->readEndpoint = 0x01 | LIBUSB_ENDPOINT_IN;
+    this->writeEndpoint = 0x01  | LIBUSB_ENDPOINT_OUT;
 }
 
 QUsb::~QUsb()
@@ -36,206 +38,135 @@ QUsb::~QUsb()
 
 qint32 QUsb::open()
 {
+    int r; //for return values
+    ssize_t cnt; //holding number of devices in list
+    r = libusb_init(&ctx); //initialize the library for the session we just declared
+    if(r < 0) {
+        qDebug()<<"Init Error "<<r; //there was an error
+        return 1;
+    }
+    libusb_set_debug(ctx, 3); //set verbosity level to 3, as suggested in the documentation
 
-   // Initialize the library.
-    usb_init();
+    cnt = libusb_get_device_list(ctx, &devs); //get the list of devices
+    if(cnt < 0) {
+        qDebug()<<"Get Device Error"; //there was an error
+        return 1;
+    }
 
-    // Find all busses.
-    usb_find_busses();
+    dev_handle = libusb_open_device_with_vid_pid(ctx, USB_ST_VID, USB_DEVICE_PID); //these are vendorID and productID I found for my usb device
+    if(dev_handle == NULL)
+        qDebug()<<"Cannot open device";
+    else
+        qDebug()<<"Device Opened";
+    libusb_free_device_list(devs, 1); //free the list, unref the devices in it
 
-    // Find all connected devices.
-    usb_find_devices();
+    if(libusb_kernel_driver_active(dev_handle, 0) == 1) { //find out if kernel driver is attached
+        qDebug()<<"Kernel Driver Active";
+        if(libusb_detach_kernel_driver(dev_handle, 0) == 0) //detach it
+            qDebug()<<"Kernel Driver Detached!";
+    }
+    r = libusb_claim_interface(dev_handle, 0); //claim interface 0 (the first) of device (mine had jsut 1)
+    if(r < 0) {
+        qDebug()<<"Cannot Claim Interface";
+        return 1;
+    }
+    qDebug()<<"Claimed Interface";
 
-    // Search USB busses for USB2 ANT+ stick host controllers
-    this->device = this->OpenAntStick();
-
-    if (this->device == NULL) return -1;
-
-    qint32 rc = 0;
-
-#ifndef Q_OS_MAC
-    // these functions fail on OS X Lion
-    rc = usb_clear_halt(this->device, this->writeEndpoint);
-    if (rc < 0) qCritical()<<"usb_clear_halt writeEndpoint Error: "<< usb_strerror();
-
-    rc = usb_clear_halt(this->device, this->readEndpoint);
-    if (rc < 0) qCritical()<<"usb_clear_halt readEndpoint Error: "<< usb_strerror();
-#endif
-
-    return rc;
+    return 0;
 }
 
 void QUsb::close()
 {
-    if (this->device) {
+    if (this->dev_handle) {
         // stop any further write attempts whilst we close down
         qDebug() << "Closing USB connection...";
-        usb_dev_handle *p = this->device;
-        this->device = NULL;
 
-        usb_release_interface(p, interface);
-        usb_close(p);
+        libusb_release_interface(dev_handle, 0); //release the claimed interface
+        libusb_close(dev_handle); //close the device we opened
+        libusb_exit(ctx); //needs to be called to end the
     }
 }
 
 qint32 QUsb::read(QByteArray *buf, quint32 bytes)
 {
+    qint32 rc, actual, actual_tmp;
+    QElapsedTimer timer;
+
     // check it isn't closed already
-    if (!device) return -1;
+    if (!this->dev_handle) return -1;
 
-    char *buffer = new char[bytes];
-    qint32 rc = usb_bulk_read(this->device, this->readEndpoint, buffer, bytes, USB_TIMEOUT_MSEC);
-//    qDebug() << "Bytes read: " << rc;
+    if (bytes == 0)
+        return 0;
 
+    actual = 0;
+    actual_tmp = 0;
+    uchar *buffer = new uchar[bytes];
+
+    timer.start();
+    while (!timer.hasExpired(USB_TIMEOUT_MSEC*2) && bytes-actual > 0) {
+        rc = libusb_bulk_transfer(dev_handle, (this->readEndpoint), buffer+actual, bytes-actual, &actual_tmp, USB_TIMEOUT_MSEC);
+        actual += actual_tmp;
+        if (rc != 0) break;
+    }
     // we clear the buffer.
     buf->clear();
-    QString data, s;
+//    QString data, s;
 
-    if (rc > 0) {
-        for (quint32 i = 0; i < bytes; i++) {
-            buf->append(buffer[i]);
-            data.append(s.sprintf("%02X",(uchar)buf->at(i))+":");
-        }
-        data.remove(data.size()-1, 1); //remove last colon
+//    if (1) {
+//        for (qint32 i = 0; i < actual; i++) {
+//            buf->append(buffer[i]);
+//            data.append(s.sprintf("%02X",(uchar)buf->at(i))+":");
+//        }
+//        data.remove(data.size()-1, 1); //remove last colon
 //        qDebug() << "Received: " << data;
-    }
-    else if (rc < 0)
+//    }
+    delete buffer;
+    if (rc != 0)
     {
         if (rc == -110)
             qDebug() << "Timeout";
         else
-            qCritical() << "usb_bulk_read Error reading: " << rc << usb_strerror();
+            qCritical() << "libusb_bulk_transfer Error reading: " << rc;
         return rc;
     }
-    delete buffer;
-    return rc;
+    //delete buffer;
+    return actual;
 }
 
 qint32 QUsb::write(QByteArray *buf, quint32 bytes)
 {
+    qint32 rc, actual, actual_tmp;
+    QElapsedTimer timer;
 
     // check it isn't closed
-    if (!this->device) return -1;
+    if (!this->dev_handle) return -1;
 
     QString cmd, s;
         for (int i=0; i<buf->size(); i++) {
             cmd.append(s.sprintf("%02X",(uchar)buf->at(i))+":");
         }
         cmd.remove(cmd.size()-1, 1); //remove last colon
-//        qDebug() << "Sending" << buf->size() << "bytes:" << cmd;
+        qDebug() << "Sending" << buf->size() << "bytes:" << cmd;
 
-    // we use a non-interrupted write on Linux/Mac since the interrupt
-    // write block size is incorectly implemented in the version of
-    // QUsb we build with. It is no less efficent.
-#if defined Q_OS_MAC || WIN32 || __linux__
-    qint32 rc = usb_bulk_write(this->device, this->writeEndpoint, buf->data(), bytes, USB_TIMEOUT_MSEC);
-#else // Workaround for OSX with the brew QUsb package...
-    qint32 rc = usb_bulk_write(this->device, this->writeEndpoint, buf->constData(), bytes, USB_TIMEOUT_MSEC);
-#endif
+    actual = 0;
+    actual_tmp = 0;
 
-    if (rc < 0)
+    timer.start();
+    while (!timer.hasExpired(USB_TIMEOUT_MSEC*2) && bytes-actual > 0) {
+        rc = libusb_bulk_transfer(dev_handle, (this->writeEndpoint), (uchar*)buf->constData(), bytes, &actual, USB_TIMEOUT_MSEC);
+        actual += actual_tmp;
+        if (rc != 0) break;
+    }
+
+    if (rc != 0)
     {
         if (rc == -110)
             qDebug() << "Timeout";
         else if (rc == -2)
             qCritical() << "EndPoint not found";
         else
-            qCritical() << "usb_bulk_write Error: "<< usb_strerror();
+            qCritical() << "usb_bulk_write Error: "<< rc;
     }
 
-    return rc;
-}
-
-struct usb_dev_handle* QUsb::OpenAntStick()
-{
-
-    struct usb_bus* bus;
-    struct usb_device* dev;
-    struct usb_dev_handle* udev;
-
-    for (bus = usb_get_busses(); bus; bus = bus->next) {
-
-        for (dev = bus->devices; dev; dev = dev->next) {
-
-            if (dev->descriptor.idVendor == USB_ST_VID && dev->descriptor.idProduct == USB_STLINK_PID) {
-
-                qCritical() << "Found ST an Link V1, this one is not supported!";
-                return NULL;
-            }
-
-            else if (dev->descriptor.idVendor == USB_ST_VID && dev->descriptor.idProduct == USB_STLINKv2_PID) {
-
-                //Avoid noisy output
-                qInformal() << "Found an ST Link V2.";
-
-                if ((udev = usb_open(dev))) {
-                    qInformal() << "Opening device...";
-
-                    if (dev->descriptor.bNumConfigurations) {
-
-                        if ((intf = usb_find_interface(&dev->config[0])) != NULL) { // Loading first config.
-
-                            qint32 rc = usb_set_configuration(udev, 1);
-                            if (rc < 0) {
-                                qCritical()<<"usb_set_configuration Error: "<< usb_strerror();
-#ifdef __linux__
-                                // looks like the udev rule has not been implemented
-                                qCritical()<<"Check permissions on:"<<QString("/dev/bus/usb/%1/%2").arg(bus->dirname).arg(dev->filename);
-                                qCritical()<<"Did you remember to setup a udev rule for this device?";
-                                qCritical()<<"Copy file 49-stlinkv2.rules to /etc/udev/rules.d/ to enable access.";
-                                return NULL;
-#endif
-                            }
-
-                            rc = usb_claim_interface(udev, this->interface);
-                            if (rc < 0) qCritical()<<"usb_claim_interface Error: "<< usb_strerror();
-
-//#ifndef Q_OS_MAC
-//                            // fails on Mac OS X, we don't actually need it anyway
-//                            rc = usb_set_altinterface(udev, alternate);
-//                            if (rc < 0) qDebug()<<"usb_set_altinterface Error: "<< usb_strerror();
-//#endif
-                            qInformal() << "Device Open.";
-                            return udev;
-                        }
-                        else qCritical() << "Could not load interface configuration.";
-                    }
-
-                    usb_close(udev);
-                }
-            }
-        }
-    }
-    qCritical() << "Found nothing...";
-    return NULL;
-}
-
-struct usb_interface_descriptor* QUsb::usb_find_interface(struct usb_config_descriptor* config_descriptor)
-{
-
-    struct usb_interface_descriptor* intf;
-
-    this->readEndpoint = 0;
-    this->writeEndpoint = 0;
-    this->interface = 0;
-    this->alternate = 0;
-
-    if (!config_descriptor) return NULL;
-
-    if (!config_descriptor->bNumInterfaces) return NULL;
-
-    if (!config_descriptor->interface[0].num_altsetting) return NULL;
-
-    intf = &config_descriptor->interface[0].altsetting[0];
-
-    this->interface = intf->bInterfaceNumber;
-    this->alternate = intf->bAlternateSetting;
-
-    this->readEndpoint = USB_PIPE_IN; // IN = ST link -> Host
-    this->writeEndpoint = USB_PIPE_OUT; // OUT = Host -> ST link
-
-    if (this->readEndpoint == 0 || this->writeEndpoint == 0)
-        return NULL;
-
-    return intf;
+    return actual;
 }

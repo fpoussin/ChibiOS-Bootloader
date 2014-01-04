@@ -87,7 +87,6 @@ void transferThread::send(const QString &filename)
     qInformal() << "Writing from" << "0x"+QString::number(from, 16) << "to" << "0x"+QString::number(to, 16);
 
     progress = 0;
-    quint32 status = 0, loader_pos = 0;
     for (int i=0; i<=file.size(); i+=step_size) {
 
         if (this->m_stop)
