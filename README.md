@@ -1,4 +1,4 @@
-ChibiOS-Bootloader
-==================
+ChibiOS-Bootlader
+=================
 
 ChibiOS based USB bootloader.
